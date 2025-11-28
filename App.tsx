@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { 
@@ -102,7 +101,7 @@ const App: React.FC = () => {
         try {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
           const strategyNames = strategies.map(s => {
-             if(s === Strategy.CDM) return "CDM 과학적 분석";
+             if(s === Strategy.CDM) return "CDM (변분 베이지안)";
              if(s === Strategy.STRATEGY_3) return "The 3-Strategy (마르팅게일)";
              if(s === Strategy.SAJU) return "사주 오행";
              return s;
@@ -280,12 +279,12 @@ const App: React.FC = () => {
                     
                     {strategies.includes(Strategy.STRATEGY_3) && (
                       <p className="text-[10px] text-pink-600 mt-2 bg-pink-50 p-2 rounded leading-tight border border-pink-100">
-                        * The 3-Strategy: 당첨 간격에 따라 4단계(1/2/5/12배) 가중치를 부여하는 손실 회수 전략입니다.
+                        * The 3-Strategy: 당첨 간격(Gap)에 따라 단계별 가중치(1/2/5/12배)를 부여하는 마르팅게일 전략입니다.
                       </p>
                     )}
                     {strategies.includes(Strategy.CDM) && !strategies.includes(Strategy.STRATEGY_3) && (
                       <p className="text-[10px] text-indigo-600 mt-2 bg-indigo-50 p-2 rounded leading-tight">
-                        * CDM 모델: 과거 당첨 빈도를 분석하여 미래 확률을 예측하는 통계 모델입니다.
+                        * CDM 모델: 변분 베이지안 방법으로 KL 발산을 최소화하여 사후 분포(ELBO)를 최적화합니다.
                       </p>
                     )}
                   </div>

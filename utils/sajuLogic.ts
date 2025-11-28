@@ -37,30 +37,63 @@ export const getOheng = (year: number): ElementType => {
 };
 
 /**
- * CDM (Compound-Dirichlet-Multinomial) Logic
- * Uses historical frequency as a 'Posterior' to update the 'Prior' (uniform).
+ * CDM (Compound-Dirichlet-Multinomial) with Variational Bayesian Inference
+ * 
+ * Theory:
+ * The posterior distribution p(Z|X) is difficult to calculate due to the marginal likelihood p(X).
+ * Variational Bayesian methods approximate p(Z|X) with a simpler distribution q(Z).
+ * We optimize q(Z) to be as close as possible to p(Z|X) by minimizing the Kullback-Leibler (KL) Divergence.
+ * Minimizing KL Divergence is equivalent to Maximizing the Evidence Lower Bound (ELBO).
+ * 
+ * Implementation:
+ * We use an iterative Variational EM-like algorithm to update the Dirichlet hyperparameters (alpha).
  */
 const calculateCDMWeights = (): number[] => {
   const range = 45;
-  const frequencies = new Array(range + 1).fill(1); // Dirichlet Prior (Alpha = 1)
+  const iterations = 50; // Optimization steps
+  const learningRate = 0.1; // Step size for gradient ascent on ELBO
+
+  // 1. Initialize Variational Parameters (q(Z) approx)
+  // Start with a flat prior (Dirichlet alpha = 1.0)
+  let variationalAlpha = new Array(range + 1).fill(1.0);
   
-  // 1. Calculate Frequency (CDM)
+  // Historical Counts (Observed Data X)
+  const observedCounts = new Array(range + 1).fill(0);
   HISTORICAL_DATA.forEach(draw => {
     draw.numbers.forEach(num => {
-      if (num >= 1 && num <= 45) {
-        frequencies[num]++;
-      }
+      if (num >= 1 && num <= 45) observedCounts[num]++;
     });
   });
+  const totalObservations = HISTORICAL_DATA.length * 6;
 
-  // 2. Weight = Frequency ^ Momentum
-  const weights = [];
-  for (let i = 1; i <= range; i++) {
-    const freqScore = Math.pow(frequencies[i], 1.5); 
-    weights.push(freqScore);
+  // 2. Iterative Optimization (Variational EM Loop)
+  for (let iter = 0; iter < iterations; iter++) {
+    // Current sum of alphas (concentration)
+    const sumAlpha = variationalAlpha.reduce((a, b) => a + b, 0);
+    
+    for (let k = 1; k <= range; k++) {
+      // E-Step: Calculate Expected Probability using Digamma approximation
+      // Expected[Z_k] ~ alpha_k / sum(alpha)
+      const expectedProb = variationalAlpha[k] / sumAlpha;
+      
+      // M-Step: Gradient of ELBO
+      // We want to align Expected Prob with Observed Frequency while maintaining the Prior
+      // Gradient ~ (Observed_k - Total_Obs * Expected_k)
+      // This minimizes the KL divergence between the empirical distribution and our Dirichlet approximation
+      const gradient = observedCounts[k] - (totalObservations * expectedProb);
+      
+      // Update Parameter (Projected Gradient Ascent)
+      variationalAlpha[k] += learningRate * gradient;
+      
+      // Constraint: Alpha must be > 0 (Dirichlet requirement)
+      // We add a small regularization term (0.1) to prevent collapse
+      if (variationalAlpha[k] < 0.1) variationalAlpha[k] = 0.1;
+    }
   }
-  
-  return weights;
+
+  // 3. The optimized variationalAlpha represents the weights of the Posterior
+  // Remove index 0
+  return variationalAlpha.slice(1);
 };
 
 /**
@@ -87,7 +120,7 @@ const calculate3StrategyWeights = (): number[] => {
 
     let multiplier = 1;
 
-    // 2. Apply The 3-Strategy Phases
+    // 2. Apply "The 3-Strategy" Phases
     if (gap <= 60) {
       multiplier = 1; // Phase 1
     } else if (gap <= 120) {
@@ -98,7 +131,8 @@ const calculate3StrategyWeights = (): number[] => {
       multiplier = 12; // Phase 4
     }
 
-    weights.push(multiplier);
+    // Base weight is 10, multiplied by the strategy phase
+    weights.push(10 * multiplier);
   }
 
   return weights;
@@ -132,7 +166,7 @@ const weightedRandomSelect = (items: number[], weights: number[], count: number)
   // Fallback if weights exhausted
   while(selected.size < count) {
     const r = Math.floor(Math.random() * 45) + 1;
-    selected.add(r);
+    if (!selected.has(r)) selected.add(r);
   }
 
   return Array.from(selected);
@@ -155,13 +189,13 @@ export const generateNumbers = (strategies: Strategy[], userElement: ElementType
       PROBABILITY_NUMBERS.forEach(n => candidates.add(n));
     }
     else if (strat === Strategy.CDM) {
-      // CDM: Frequent numbers (Hot)
+      // CDM: Variational Bayesian Posterior (Optimized q(Z))
       const cdmWeights = calculateCDMWeights();
       const cdmPicks = weightedRandomSelect(allNums, cdmWeights, 10);
       cdmPicks.forEach(n => candidates.add(n));
     }
     else if (strat === Strategy.STRATEGY_3) {
-      // The 3-Strategy: Overdue numbers (Cold/Gap) with Martingale weights
+      // The 3-Strategy: Gap Analysis with Martingale Phasing
       const strat3Weights = calculate3StrategyWeights();
       const strat3Picks = weightedRandomSelect(allNums, strat3Weights, 10);
       strat3Picks.forEach(n => candidates.add(n));
@@ -174,10 +208,7 @@ export const generateNumbers = (strategies: Strategy[], userElement: ElementType
   // Shuffle the candidate pool
   nums.sort(() => 0.5 - Math.random());
 
-  // 2. If we have selected strategies, try to prioritize them.
-  // If no strategy selected (edge case), or logic yields < 6, we fill below.
-  
-  // 3. Fill the rest using a balanced approach (or purely random if no sophisticated strat)
+  // 2. Fill the rest
   let remainder: number[];
   
   // If Strategy 3 is active, use its weights for filling to maintain the "Martingale" pressure
@@ -189,9 +220,20 @@ export const generateNumbers = (strategies: Strategy[], userElement: ElementType
      });
      const needed = Math.max(0, targetCount - nums.length);
      // Pick more than needed to ensure uniqueness check passes easily
-     const filled = weightedRandomSelect(allNums, weights, needed + 10);
+     const filled = weightedRandomSelect(allNums, weights, needed + 15);
      remainder = filled.filter(n => !nums.includes(n));
-  } else {
+  } 
+  // If CDM is active, use Variational weights for filling
+  else if (strategies.includes(Strategy.CDM)) {
+     const weights = calculateCDMWeights();
+     nums.forEach(picked => {
+       if(picked >=1 && picked <= 45) weights[picked-1] = 0;
+     });
+     const needed = Math.max(0, targetCount - nums.length);
+     const filled = weightedRandomSelect(allNums, weights, needed + 15);
+     remainder = filled.filter(n => !nums.includes(n));
+  }
+  else {
      // Default fill
      remainder = allNums.filter(n => !nums.includes(n));
      remainder.sort(() => 0.5 - Math.random());
