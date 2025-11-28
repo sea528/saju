@@ -37,18 +37,12 @@ export const getOheng = (year: number): ElementType => {
 };
 
 /**
- * CDM (Compound-Dirichlet-Multinomial) & 3-Strategy Implementation
- * 1. CDM: Uses historical frequency as a 'Posterior' to update the 'Prior' (uniform).
- * 2. 3-Strategy: Analyzes the 'Gap' (interval since last drawn) to find 'Due' numbers.
+ * CDM (Compound-Dirichlet-Multinomial) Logic
+ * Uses historical frequency as a 'Posterior' to update the 'Prior' (uniform).
  */
 const calculateCDMWeights = (): number[] => {
   const range = 45;
   const frequencies = new Array(range + 1).fill(1); // Dirichlet Prior (Alpha = 1)
-  const gaps = new Array(range + 1).fill(0);
-  
-  // Analyze History
-  // We process from newest to oldest to calculate current gaps correctly
-  // Note: HISTORICAL_DATA in constants is just a sample, so this is a simulation based on available data.
   
   // 1. Calculate Frequency (CDM)
   HISTORICAL_DATA.forEach(draw => {
@@ -59,31 +53,54 @@ const calculateCDMWeights = (): number[] => {
     });
   });
 
-  // 2. Calculate Gaps (3-Strategy) - Distance from most recent draw
-  // Since HISTORICAL_DATA is not continuous in our mock, we estimate gap based on presence in sample.
-  for (let i = 1; i <= range; i++) {
-    let found = false;
-    for (let d = 0; d < HISTORICAL_DATA.length; d++) {
-      if (HISTORICAL_DATA[d].numbers.includes(i)) {
-        gaps[i] = d; // Index distance represents gap roughly
-        found = true;
-        break;
-      }
-    }
-    if (!found) gaps[i] = HISTORICAL_DATA.length * 1.5; // Penalty/Boost for never seen
-  }
-
-  // 3. Combine into Weight
-  // Weight = (Frequency ^ Momentum) + (Gap * ReversionFactor)
-  // Higher frequency = higher weight (CDM/Polya Urn effect)
-  // Higher gap = slightly higher weight (3-Strategy Mean Reversion)
+  // 2. Weight = Frequency ^ Momentum
   const weights = [];
   for (let i = 1; i <= range; i++) {
-    const freqScore = Math.pow(frequencies[i], 1.2); 
-    const gapScore = Math.sqrt(gaps[i]) * 2; 
-    weights.push(freqScore + gapScore);
+    const freqScore = Math.pow(frequencies[i], 1.5); 
+    weights.push(freqScore);
   }
   
+  return weights;
+};
+
+/**
+ * "The 3-Strategy" Logic (Martingale / Gap Analysis)
+ * 
+ * Phases based on Gap (Draws since last appearance):
+ * Phase 1 (0-60 draws): 1 Player (Weight x1)
+ * Phase 2 (61-120 draws): 2 Players (Weight x2) - Recovery
+ * Phase 3 (121-180 draws): 5 Players (Weight x5) - Profit
+ * Phase 4 (181+ draws): 12 Players (Weight x12) - Complete Recovery
+ */
+const calculate3StrategyWeights = (): number[] => {
+  const range = 45;
+  const weights = [];
+  const latestDrawNo = Math.max(...HISTORICAL_DATA.map(d => d.drawNo));
+
+  for (let num = 1; num <= range; num++) {
+    // 1. Find the last draw index for this number
+    const lastDraw = HISTORICAL_DATA.find(draw => draw.numbers.includes(num));
+    
+    // Calculate Gap (If never seen in sample, assume a large gap for demo purposes, e.g., 200)
+    const lastDrawNo = lastDraw ? lastDraw.drawNo : (latestDrawNo - 200); 
+    const gap = latestDrawNo - lastDrawNo;
+
+    let multiplier = 1;
+
+    // 2. Apply The 3-Strategy Phases
+    if (gap <= 60) {
+      multiplier = 1; // Phase 1
+    } else if (gap <= 120) {
+      multiplier = 2; // Phase 2
+    } else if (gap <= 180) {
+      multiplier = 5; // Phase 3
+    } else {
+      multiplier = 12; // Phase 4
+    }
+
+    weights.push(multiplier);
+  }
+
   return weights;
 };
 
@@ -91,6 +108,9 @@ const weightedRandomSelect = (items: number[], weights: number[], count: number)
   const selected = new Set<number>();
   const _weights = [...weights]; // Copy to mutate
   
+  // Safety check
+  if (items.length !== weights.length) return items.slice(0, count);
+
   while(selected.size < count) {
     const totalWeight = _weights.reduce((a, b) => a + b, 0);
     if (totalWeight <= 0) break; // Safety
@@ -109,7 +129,7 @@ const weightedRandomSelect = (items: number[], weights: number[], count: number)
     }
   }
   
-  // Fallback if weights exhausted (rare)
+  // Fallback if weights exhausted
   while(selected.size < count) {
     const r = Math.floor(Math.random() * 45) + 1;
     selected.add(r);
@@ -120,6 +140,7 @@ const weightedRandomSelect = (items: number[], weights: number[], count: number)
 
 export const generateNumbers = (strategies: Strategy[], userElement: ElementType): number[] => {
   const candidates = new Set<number>();
+  const allNums = Array.from({ length: 45 }, (_, i) => i + 1);
   
   // 1. Collect candidates based on selected strategies
   strategies.forEach(strat => {
@@ -134,51 +155,45 @@ export const generateNumbers = (strategies: Strategy[], userElement: ElementType
       PROBABILITY_NUMBERS.forEach(n => candidates.add(n));
     }
     else if (strat === Strategy.CDM) {
-      // Generate 6 high-probability numbers using CDM+3-Strategy logic
+      // CDM: Frequent numbers (Hot)
       const cdmWeights = calculateCDMWeights();
-      const allNums = Array.from({ length: 45 }, (_, i) => i + 1);
-      const cdmPicks = weightedRandomSelect(allNums, cdmWeights, 10); // Pick top 10 pool
+      const cdmPicks = weightedRandomSelect(allNums, cdmWeights, 10);
       cdmPicks.forEach(n => candidates.add(n));
+    }
+    else if (strat === Strategy.STRATEGY_3) {
+      // The 3-Strategy: Overdue numbers (Cold/Gap) with Martingale weights
+      const strat3Weights = calculate3StrategyWeights();
+      const strat3Picks = weightedRandomSelect(allNums, strat3Weights, 10);
+      strat3Picks.forEach(n => candidates.add(n));
     }
   });
 
   let nums = Array.from(candidates);
-  
-  // 2. Refine the selection
-  const isRandomSelected = strategies.includes(Strategy.RANDOM);
   const targetCount = 6;
 
   // Shuffle the candidate pool
   nums.sort(() => 0.5 - Math.random());
 
-  // If "RANDOM" is selected along with others, we ensure we mix pure randoms
-  if (isRandomSelected && strategies.length > 1) {
-    // Keep only half from the smart strategies to let random fill the rest
-    nums = nums.slice(0, 3); 
-  } else if (strategies.length > 0 && !isRandomSelected) {
-    // If only specific strategies, try to fill mostly from them
-    // If we have too many candidates (e.g. Saju + CDM), pick best 6
-    // If we have too few, we will fill later
-  }
-
-  // 3. Fill the rest
-  const allNumbers = Array.from({ length: 45 }, (_, i) => i + 1);
+  // 2. If we have selected strategies, try to prioritize them.
+  // If no strategy selected (edge case), or logic yields < 6, we fill below.
   
-  // If CDM is involved, use CDM weights for filling remainder instead of pure random for better accuracy
+  // 3. Fill the rest using a balanced approach (or purely random if no sophisticated strat)
   let remainder: number[];
-  if (strategies.includes(Strategy.CDM) && !isRandomSelected) {
-     const cdmWeights = calculateCDMWeights();
+  
+  // If Strategy 3 is active, use its weights for filling to maintain the "Martingale" pressure
+  if (strategies.includes(Strategy.STRATEGY_3)) {
+     const weights = calculate3StrategyWeights();
      // Zero out weights of already picked
      nums.forEach(picked => {
-       if(picked >=1 && picked <= 45) cdmWeights[picked-1] = 0;
+       if(picked >=1 && picked <= 45) weights[picked-1] = 0;
      });
-     // Weighted fill
      const needed = Math.max(0, targetCount - nums.length);
-     const filled = weightedRandomSelect(allNumbers, cdmWeights, needed + 5); // +5 buffer
+     // Pick more than needed to ensure uniqueness check passes easily
+     const filled = weightedRandomSelect(allNums, weights, needed + 10);
      remainder = filled.filter(n => !nums.includes(n));
   } else {
-     // Pure random fill
-     remainder = allNumbers.filter(n => !nums.includes(n));
+     // Default fill
+     remainder = allNums.filter(n => !nums.includes(n));
      remainder.sort(() => 0.5 - Math.random());
   }
 
@@ -190,8 +205,7 @@ export const generateNumbers = (strategies: Strategy[], userElement: ElementType
     if (!result.includes(r)) result.push(r);
   }
   
-  // Final trim in case we have too many (e.g. pure strategy yield > 6)
+  // Final trim and sort
   result = result.slice(0, 6);
-
   return result.sort((a, b) => a - b);
 };

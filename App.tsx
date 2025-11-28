@@ -10,7 +10,8 @@ import {
   Gem,
   Info,
   Check,
-  BrainCircuit
+  BrainCircuit,
+  TrendingUp
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -102,6 +103,7 @@ const App: React.FC = () => {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
           const strategyNames = strategies.map(s => {
              if(s === Strategy.CDM) return "CDM 과학적 분석";
+             if(s === Strategy.STRATEGY_3) return "The 3-Strategy (마르팅게일)";
              if(s === Strategy.SAJU) return "사주 오행";
              return s;
           }).join(' + ');
@@ -250,14 +252,14 @@ const App: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                       {Object.values(Strategy).map((s) => {
                         const isSelected = strategies.includes(s);
-                        // Labels
+                        // Labels & Icons
                         let label = "";
                         let icon = null;
                         if(s === Strategy.SAJU) { label = "사주 기반"; icon = <Sparkles size={14}/>; }
                         else if(s === Strategy.CDM) { label = "CDM (과학)"; icon = <BrainCircuit size={14}/>; }
+                        else if(s === Strategy.STRATEGY_3) { label = "The 3-Strategy"; icon = <TrendingUp size={14}/>; }
                         else if(s === Strategy.MIXED) { label = "혼합 (추천)"; }
                         else if(s === Strategy.PROBABILITY) { label = "확률 상위"; }
-                        else if(s === Strategy.RANDOM) { label = "완전 랜덤"; }
 
                         return (
                           <button
@@ -275,9 +277,15 @@ const App: React.FC = () => {
                         );
                       })}
                     </div>
-                    {strategies.includes(Strategy.CDM) && (
+                    
+                    {strategies.includes(Strategy.STRATEGY_3) && (
+                      <p className="text-[10px] text-pink-600 mt-2 bg-pink-50 p-2 rounded leading-tight border border-pink-100">
+                        * The 3-Strategy: 당첨 간격에 따라 4단계(1/2/5/12배) 가중치를 부여하는 손실 회수 전략입니다.
+                      </p>
+                    )}
+                    {strategies.includes(Strategy.CDM) && !strategies.includes(Strategy.STRATEGY_3) && (
                       <p className="text-[10px] text-indigo-600 mt-2 bg-indigo-50 p-2 rounded leading-tight">
-                        * CDM 모델: 통계적 확률(CDM)과 3-Strategy(간격 분석)를 결합한 과학적 분석 방식입니다.
+                        * CDM 모델: 과거 당첨 빈도를 분석하여 미래 확률을 예측하는 통계 모델입니다.
                       </p>
                     )}
                   </div>
@@ -324,7 +332,7 @@ const App: React.FC = () => {
                         <div className="flex gap-1.5 flex-wrap justify-center">
                             {result.strategies.map(s => (
                                 <span key={s} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] rounded-full border border-indigo-100 font-bold">
-                                    {s === Strategy.CDM ? 'CDM+3Strategy' : s}
+                                    {s === Strategy.STRATEGY_3 ? 'The 3-Strategy' : s}
                                 </span>
                             ))}
                         </div>

@@ -1,7 +1,7 @@
 export enum Strategy {
   SAJU = 'SAJU',
   MIXED = 'MIXED',
-  RANDOM = 'RANDOM',
+  STRATEGY_3 = 'STRATEGY_3', // Replaces RANDOM with "The 3-Strategy"
   PROBABILITY = 'PROBABILITY',
   CDM = 'CDM'
 }
