@@ -9,7 +9,8 @@ import {
   CalendarDays,
   Gem,
   Info,
-  Check
+  Check,
+  BrainCircuit
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -99,7 +100,12 @@ const App: React.FC = () => {
         setAiLoading(true);
         try {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          const strategyNames = strategies.join(' + ');
+          const strategyNames = strategies.map(s => {
+             if(s === Strategy.CDM) return "CDM 과학적 분석";
+             if(s === Strategy.SAJU) return "사주 오행";
+             return s;
+          }).join(' + ');
+          
           const prompt = AI_PROMPT_TEMPLATE
             .replace('{year}', userProfile.year.toString())
             .replace('{zodiac}', userProfile.zodiac)
@@ -236,32 +242,44 @@ const App: React.FC = () => {
 
                   <div className="pt-2 border-t border-slate-100">
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-2 flex justify-between">
-                      <span>추천 전략 (최대 2개)</span>
-                      <span className="text-indigo-500">{strategies.length}/2</span>
+                      <span>추천 전략 (최대 2개 선택)</span>
+                      <span className={`text-xs ${strategies.length === 2 ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
+                        {strategies.length}/2
+                      </span>
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {Object.values(Strategy).map((s) => {
                         const isSelected = strategies.includes(s);
+                        // Labels
+                        let label = "";
+                        let icon = null;
+                        if(s === Strategy.SAJU) { label = "사주 기반"; icon = <Sparkles size={14}/>; }
+                        else if(s === Strategy.CDM) { label = "CDM (과학)"; icon = <BrainCircuit size={14}/>; }
+                        else if(s === Strategy.MIXED) { label = "혼합 (추천)"; }
+                        else if(s === Strategy.PROBABILITY) { label = "확률 상위"; }
+                        else if(s === Strategy.RANDOM) { label = "완전 랜덤"; }
+
                         return (
                           <button
                             key={s}
                             onClick={() => toggleStrategy(s)}
-                            className={`py-3 px-3 rounded-lg text-xs font-medium transition-all relative overflow-hidden flex items-center justify-center gap-1 ${
+                            className={`py-2.5 px-2 rounded-lg text-xs font-medium transition-all relative overflow-hidden flex items-center justify-center gap-1.5 ${
                               isSelected
                                 ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300 ring-offset-1' 
-                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                : 'bg-white text-slate-600 hover:bg-indigo-50 border border-slate-200'
                             }`}
                           >
-                            {isSelected && <Check size={12} className="absolute left-2" />}
-                            <span>
-                              {s === 'SAJU' ? '사주 기반' : 
-                               s === 'MIXED' ? '혼합 (추천)' :
-                               s === 'PROBABILITY' ? '확률 상위' : '완전 랜덤'}
-                            </span>
+                            {isSelected && <Check size={12} className="absolute left-1.5 top-1/2 -translate-y-1/2" />}
+                            <span className={isSelected ? 'ml-3' : ''}>{icon} {label}</span>
                           </button>
                         );
                       })}
                     </div>
+                    {strategies.includes(Strategy.CDM) && (
+                      <p className="text-[10px] text-indigo-600 mt-2 bg-indigo-50 p-2 rounded leading-tight">
+                        * CDM 모델: 통계적 확률(CDM)과 3-Strategy(간격 분석)를 결합한 과학적 분석 방식입니다.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -275,7 +293,7 @@ const App: React.FC = () => {
                   ) : (
                     <Sparkles className="text-yellow-300" />
                   )}
-                  {isGenerating ? '운세 분석 중...' : '행운 번호 추출하기'}
+                  {isGenerating ? '정밀 분석 중...' : '행운 번호 추출하기'}
                 </button>
               </div>
 
@@ -301,12 +319,12 @@ const App: React.FC = () => {
                   {/* Balls Display */}
                   <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 text-center relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50"></div>
-                    <div className="flex justify-center items-center gap-2 mb-6">
+                    <div className="flex flex-col justify-center items-center gap-2 mb-6">
                         <span className="text-slate-500 text-sm font-medium uppercase tracking-wider">LUCKY NUMBERS</span>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1.5 flex-wrap justify-center">
                             {result.strategies.map(s => (
                                 <span key={s} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] rounded-full border border-indigo-100 font-bold">
-                                    {s}
+                                    {s === Strategy.CDM ? 'CDM+3Strategy' : s}
                                 </span>
                             ))}
                         </div>
@@ -317,7 +335,7 @@ const App: React.FC = () => {
                         <LottoBall key={`${num}-${idx}`} number={num} index={idx} />
                       ))}
                     </div>
-                    <div className="mt-6 pt-6 border-t border-slate-100 flex justify-center gap-4 text-xs text-slate-400">
+                    <div className="mt-6 pt-6 border-t border-slate-100 flex flex-wrap justify-center gap-4 text-xs text-slate-400">
                       <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-400"></div> 1-10</span>
                       <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> 11-20</span>
                       <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> 21-30</span>
@@ -331,7 +349,7 @@ const App: React.FC = () => {
                     <Gem className="absolute top-4 right-4 text-white/20" size={48} />
                     <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
                       <Sparkles size={18} className="text-yellow-300" />
-                      AI 운세 해석
+                      AI 운세 & 전략 분석
                     </h3>
                     {aiLoading ? (
                       <div className="space-y-2 animate-pulse">

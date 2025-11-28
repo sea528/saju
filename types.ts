@@ -2,7 +2,8 @@ export enum Strategy {
   SAJU = 'SAJU',
   MIXED = 'MIXED',
   RANDOM = 'RANDOM',
-  PROBABILITY = 'PROBABILITY'
+  PROBABILITY = 'PROBABILITY',
+  CDM = 'CDM'
 }
 
 export enum ElementType {
