@@ -8,7 +8,8 @@ import {
   RotateCcw, 
   CalendarDays,
   Gem,
-  Info
+  Info,
+  Check
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -34,7 +35,9 @@ const App: React.FC = () => {
   const [birthMonth, setBirthMonth] = useState<number>(1);
   const [birthDay, setBirthDay] = useState<number>(1);
   const [birthTime, setBirthTime] = useState<number>(12);
-  const [strategy, setStrategy] = useState<Strategy>(Strategy.SAJU);
+  
+  // Strategy State - Array for multi-select
+  const [strategies, setStrategies] = useState<Strategy[]>([Strategy.SAJU]);
   
   // Result State
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -59,6 +62,20 @@ const App: React.FC = () => {
     });
   }, [birthYear, birthMonth, birthDay, birthTime]);
 
+  const toggleStrategy = (s: Strategy) => {
+    setStrategies(prev => {
+      if (prev.includes(s)) {
+        // Prevent deselecting if it's the only one
+        if (prev.length === 1) return prev;
+        return prev.filter(item => item !== s);
+      } else {
+        // Limit to 2 strategies
+        if (prev.length >= 2) return prev; 
+        return [...prev, s];
+      }
+    });
+  };
+
   const handleGenerate = async () => {
     if (!userProfile) return;
 
@@ -68,10 +85,10 @@ const App: React.FC = () => {
 
     // Simulate calculation delay for effect
     setTimeout(async () => {
-      const numbers = generateNumbers(strategy, userProfile.element);
+      const numbers = generateNumbers(strategies, userProfile.element);
       const newResult = {
         numbers,
-        strategy,
+        strategies,
         luckyElement: userProfile.element
       };
       setResult(newResult);
@@ -82,12 +99,13 @@ const App: React.FC = () => {
         setAiLoading(true);
         try {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const strategyNames = strategies.join(' + ');
           const prompt = AI_PROMPT_TEMPLATE
             .replace('{year}', userProfile.year.toString())
             .replace('{zodiac}', userProfile.zodiac)
             .replace('{element}', userProfile.element)
             .replace('{numbers}', numbers.join(', '))
-            .replace('{strategy}', strategy);
+            .replace('{strategy}', strategyNames);
 
           const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -217,23 +235,32 @@ const App: React.FC = () => {
                   </div>
 
                   <div className="pt-2 border-t border-slate-100">
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">추천 전략</label>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-2 flex justify-between">
+                      <span>추천 전략 (최대 2개)</span>
+                      <span className="text-indigo-500">{strategies.length}/2</span>
+                    </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {Object.values(Strategy).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setStrategy(s)}
-                          className={`py-2 px-3 rounded-lg text-xs font-medium transition-all ${
-                            strategy === s 
-                              ? 'bg-indigo-600 text-white shadow-md' 
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {s === 'SAJU' ? '사주 기반' : 
-                           s === 'MIXED' ? '혼합 (추천)' :
-                           s === 'PROBABILITY' ? '확률 상위' : '완전 랜덤'}
-                        </button>
-                      ))}
+                      {Object.values(Strategy).map((s) => {
+                        const isSelected = strategies.includes(s);
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => toggleStrategy(s)}
+                            className={`py-3 px-3 rounded-lg text-xs font-medium transition-all relative overflow-hidden flex items-center justify-center gap-1 ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300 ring-offset-1' 
+                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                            }`}
+                          >
+                            {isSelected && <Check size={12} className="absolute left-2" />}
+                            <span>
+                              {s === 'SAJU' ? '사주 기반' : 
+                               s === 'MIXED' ? '혼합 (추천)' :
+                               s === 'PROBABILITY' ? '확률 상위' : '완전 랜덤'}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -274,7 +301,17 @@ const App: React.FC = () => {
                   {/* Balls Display */}
                   <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 text-center relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50"></div>
-                    <h3 className="text-slate-500 text-sm font-medium mb-6 uppercase tracking-wider">Generated Lucky Numbers</h3>
+                    <div className="flex justify-center items-center gap-2 mb-6">
+                        <span className="text-slate-500 text-sm font-medium uppercase tracking-wider">LUCKY NUMBERS</span>
+                        <div className="flex gap-1">
+                            {result.strategies.map(s => (
+                                <span key={s} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] rounded-full border border-indigo-100 font-bold">
+                                    {s}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    
                     <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
                       {result.numbers.map((num, idx) => (
                         <LottoBall key={`${num}-${idx}`} number={num} index={idx} />

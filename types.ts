@@ -24,7 +24,7 @@ export interface UserProfile {
 
 export interface GeneratedResult {
   numbers: number[];
-  strategy: Strategy;
+  strategies: Strategy[];
   fortune?: string;
   luckyElement?: string;
 }
