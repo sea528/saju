@@ -279,7 +279,7 @@ const App: React.FC = () => {
                     
                     {strategies.includes(Strategy.STRATEGY_3) && (
                       <p className="text-[10px] text-pink-600 mt-2 bg-pink-50 p-2 rounded leading-tight border border-pink-100">
-                        * The 3-Strategy: 당첨 간격(Gap)에 따라 단계별 가중치(1/2/5/12배)를 부여하는 마르팅게일 전략입니다.
+                        * The 3-Strategy: 240일 주기를 4분기로 나누어 미출현 기간(일)에 따라 가중치(1/2/5/12배)를 부여하여 손실을 만회하는 전략입니다.
                       </p>
                     )}
                     {strategies.includes(Strategy.CDM) && !strategies.includes(Strategy.STRATEGY_3) && (

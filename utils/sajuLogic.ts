@@ -96,39 +96,59 @@ const calculateCDMWeights = (): number[] => {
   return variationalAlpha.slice(1);
 };
 
+// Helper to parse date "YYYY.MM.DD"
+const parseDate = (dateStr: string): Date => {
+  const parts = dateStr.split('.');
+  if (parts.length === 3) {
+    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  }
+  return new Date();
+};
+
 /**
- * "The 3-Strategy" Logic (Martingale / Gap Analysis)
+ * "The 3-Strategy" Logic (Martingale / Day-Gap Analysis)
  * 
- * Phases based on Gap (Draws since last appearance):
- * Phase 1 (0-60 draws): 1 Player (Weight x1)
- * Phase 2 (61-120 draws): 2 Players (Weight x2) - Recovery
- * Phase 3 (121-180 draws): 5 Players (Weight x5) - Profit
- * Phase 4 (181+ draws): 12 Players (Weight x12) - Complete Recovery
+ * Based on a 240-day cycle divided into 4 quarters (60 days each).
+ * Strategy increases "players" (weight) as the gap increases to recover "loss".
+ * 
+ * Phase 1 (0-60 days): 1 Player (Weight x1) - Initial
+ * Phase 2 (61-120 days): 2 Players (Weight x2) - Recovery
+ * Phase 3 (121-180 days): 5 Players (Weight x5) - Profit Recovery
+ * Phase 4 (181+ days): 12 Players (Weight x12) - Complete Recovery
  */
 const calculate3StrategyWeights = (): number[] => {
   const range = 45;
   const weights = [];
-  const latestDrawNo = Math.max(...HISTORICAL_DATA.map(d => d.drawNo));
+  
+  // Find the latest draw date (assuming sorted or taking the first)
+  const latestDraw = HISTORICAL_DATA[0];
+  const latestDate = parseDate(latestDraw.date);
 
   for (let num = 1; num <= range; num++) {
-    // 1. Find the last draw index for this number
+    // 1. Find the last draw containing this number
     const lastDraw = HISTORICAL_DATA.find(draw => draw.numbers.includes(num));
     
-    // Calculate Gap (If never seen in sample, assume a large gap for demo purposes, e.g., 200)
-    const lastDrawNo = lastDraw ? lastDraw.drawNo : (latestDrawNo - 200); 
-    const gap = latestDrawNo - lastDrawNo;
+    let daysGap = 0;
+    if (lastDraw) {
+      const drawDate = parseDate(lastDraw.date);
+      const diffTime = Math.abs(latestDate.getTime() - drawDate.getTime());
+      daysGap = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    } else {
+      // If never seen in the sample history, assume it's very cold (Phase 4)
+      daysGap = 300; 
+    }
 
     let multiplier = 1;
 
-    // 2. Apply "The 3-Strategy" Phases
-    if (gap <= 60) {
-      multiplier = 1; // Phase 1
-    } else if (gap <= 120) {
-      multiplier = 2; // Phase 2
-    } else if (gap <= 180) {
-      multiplier = 5; // Phase 3
+    // 2. Apply "The 3-Strategy" Day-Phases
+    if (daysGap <= 60) {
+      multiplier = 1; // Phase 1: 0-60 days
+    } else if (daysGap <= 120) {
+      multiplier = 2; // Phase 2: 61-120 days
+    } else if (daysGap <= 180) {
+      multiplier = 5; // Phase 3: 121-180 days
     } else {
-      multiplier = 12; // Phase 4
+      multiplier = 12; // Phase 4: > 180 days (Targeting 240 day recovery)
     }
 
     // Base weight is 10, multiplied by the strategy phase
@@ -195,7 +215,7 @@ export const generateNumbers = (strategies: Strategy[], userElement: ElementType
       cdmPicks.forEach(n => candidates.add(n));
     }
     else if (strat === Strategy.STRATEGY_3) {
-      // The 3-Strategy: Gap Analysis with Martingale Phasing
+      // The 3-Strategy: 240-Day Cycle Martingale
       const strat3Weights = calculate3StrategyWeights();
       const strat3Picks = weightedRandomSelect(allNums, strat3Weights, 10);
       strat3Picks.forEach(n => candidates.add(n));
